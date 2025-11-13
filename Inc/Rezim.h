@@ -11,6 +11,9 @@ public:
     virtual void spracujUART(char c) {}
     virtual void stlacenieKratke() {}
     virtual void stlacenieDlhe() {}
+    virtual int getType() const {return -1;}
+    // called when switching away from this mode so implementations can stop timers/resources
+    virtual void deinit() {}
 };
 
 #endif

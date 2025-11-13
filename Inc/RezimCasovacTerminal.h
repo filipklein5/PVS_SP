@@ -5,7 +5,7 @@
 
 class RezimCasovacTerminal : public Rezim {
 public:
-    RezimCasovacTerminal(BufferedSerial* konzola_uart, uint32_t intervalMs);
+    RezimCasovacTerminal(UnbufferedSerial* konzola_uart, uint32_t intervalMs);
     void inicializuj() override;
     void aktualizuj() override;
     void spracujUART(char c) override;
@@ -20,7 +20,7 @@ private:
     uint32_t intervalVypisuMs;
     uint32_t alarmSekundy;
     bool alarmSpusteny;
-    BufferedSerial* konzola;
+    UnbufferedSerial* konzola;
 
     uint32_t dajUbehnuteSekundy() const;
     void nastavAlarm(uint32_t s) { alarmSekundy = s; alarmSpusteny = false; }

@@ -8,14 +8,14 @@ class RezimUARTSynchronizacia : public Rezim {
 private:
     PinName pins[8];
     DigitalOut* led[8];
-    BufferedSerial* peerSerial;
-    BufferedSerial* konzola;
+    UnbufferedSerial* peerSerial;
+    UnbufferedSerial* konzola;
     uint8_t stavLED;
     std::chrono::milliseconds poslednyTx;
     uint32_t txIntervalMs;
 
 public:
-    RezimUARTSynchronizacia(PinName piny[8], BufferedSerial* peer_serial, BufferedSerial* konzola_uart, uint32_t txInterval);
+    RezimUARTSynchronizacia(PinName piny[8], UnbufferedSerial* peer_serial, UnbufferedSerial* konzola_uart, uint32_t txInterval);
     ~RezimUARTSynchronizacia() override;
 
     void inicializuj() override;

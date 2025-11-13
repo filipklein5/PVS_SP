@@ -1,9 +1,10 @@
 #include "RezimUARTSynchronizacia.h"
 #include <cstring>
+#include "Konzola.h"
 
 using namespace mbed;
 
-RezimUARTSynchronizacia::RezimUARTSynchronizacia(PinName piny[8], BufferedSerial* peer_serial, BufferedSerial* konzola_uart, uint32_t txInterval)
+RezimUARTSynchronizacia::RezimUARTSynchronizacia(PinName piny[8], UnbufferedSerial* peer_serial, UnbufferedSerial* konzola_uart, uint32_t txInterval)
     : peerSerial(peer_serial), konzola(konzola_uart), stavLED(0), txIntervalMs(txInterval),
       poslednyTx(std::chrono::milliseconds(0))
 {
@@ -25,7 +26,7 @@ void RezimUARTSynchronizacia::inicializuj() {
     poslednyTx = std::chrono::duration_cast<std::chrono::milliseconds>(Kernel::Clock::now().time_since_epoch());
     if(konzola){
         const char* msg="Rezim: UART synchronizacia - spustene\r\n";
-        konzola->write(msg,strlen(msg));
+        konzola_safe_write(konzola, msg, strlen(msg));
     }
 }
 
@@ -45,6 +46,6 @@ void RezimUARTSynchronizacia::spracujUART(char c){
     if(konzola){
         char buf[32];
         int n=snprintf(buf,sizeof(buf),"Prijaty stav: 0x%02X\r\n",(unsigned)stavLED);
-        konzola->write(buf,n);
+        konzola_safe_write(konzola, buf, (size_t)n);
     }
 }
