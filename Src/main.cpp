@@ -12,25 +12,19 @@
 using namespace mbed;
 using namespace std::chrono;
 
-// ----------- HARDWARE -----------
 DigitalIn tlacidlo(USER_BUTTON, PullUp);
 constexpr uint32_t DLHE_MS = 1200;
-// UnbufferedSerial pre RX interrupt
 UnbufferedSerial konzola(USBTX, USBRX, 9600);
 
-// ----------- SPRAVCA REZIMOV -----------
 SpravcaRezimov spravca(&konzola);
 
-// ----------- EVENT QUEUE -----------
 EventQueue queue;
 Thread evtThread;
 
-// ----------- SPRACOVANIE PRICHADZAJUCICH ZNAKOV -----------
 void process_char(char c) {
 	spravca.spracujUART(c);
 }
 
-// ISR callback - len enqueue
 void rx_callback() {
 	char c;
 	while (konzola.readable()) {
@@ -43,13 +37,10 @@ void rx_callback() {
 }
 
 int main() {
-	// Spustenie event queue vo vlastnom threade
 	evtThread.start(callback(&queue, &EventQueue::dispatch_forever));
 
-	// Attach RX interrupt
 	konzola.attach(callback(rx_callback), SerialBase::RxIrq);
 
-	// Drain any initial bytes
 	char rx;
 	while (konzola.readable() && konzola.read(&rx, 1) > 0) {
 		if (rx != '\r' && rx != '\n') {
@@ -57,7 +48,6 @@ int main() {
 		}
 	}
 
-	// prettier interactive menu printer
 	const char* modeNames[] = {
 		"0 - Blikanie LED",
 		"1 - Ovladanie LED (PWM)",
@@ -66,7 +56,6 @@ int main() {
 	};
 
 	auto printMenu = [&](int active)->void {
-		// ANSI clear screen + cursor home
 		const char* clear = "\x1b[2J\x1b[H";
 		konzola.write(clear, strlen(clear));
 
@@ -96,10 +85,8 @@ int main() {
 		konzola.write(buf, n);
 	};
 
-	// print initial menu (assume mode 0 active)
 	printMenu(0);
 
-	// Pridanie rezimov
 	spravca.pridajRezim(new RezimBlikanieLED(const_cast<PinName*>(LEDKY), &konzola, 200));
 	spravca.pridajRezim(new RezimOvladanieLED(const_cast<PinName*>(LEDKY_PWM), &konzola));
 	spravca.pridajRezim(new RezimUARTSynchronizacia(const_cast<PinName*>(LEDKY), nullptr, &konzola, 200));
@@ -134,7 +121,6 @@ int main() {
 					NVIC_SystemReset();
 				} else {
 					spravca.dalsiRezim();
-					// show menu for the active mode; getType used as hint for display
 					Rezim* r = spravca.getAktualnyRezim();
 					int active = 0;
 					if (r) active = r->getType() >= 0 ? r->getType() : 0;

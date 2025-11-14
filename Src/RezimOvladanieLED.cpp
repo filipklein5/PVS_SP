@@ -13,49 +13,41 @@ RezimOvladanieLED::RezimOvladanieLED(PinName piny[3], UnbufferedSerial* konzola_
 {
     for (int i=0;i<3;i++){
         pins[i] = piny[i];
-        led[i] = nullptr; // Initialize led array
+        led[i] = nullptr;
         jas[i] = 0;
     }
-    // use onboard RGB mapping for outputs
     rgbPins[0] = LEDKY_RGB[0];
     rgbPins[1] = LEDKY_RGB[1];
     rgbPins[2] = LEDKY_RGB[2];
-    for (int i=0;i<3;i++) rgbLed[i] = nullptr; // Initialize rgbLed array
+    for (int i=0;i<3;i++) rgbLed[i] = nullptr;
 }
 
 RezimOvladanieLED::~RezimOvladanieLED() {
     for (int i=0;i<3;i++) if (led[i]) delete led[i];
-    for (int i=0;i<3;i++) if (rgbLed[i]) delete rgbLed[i]; // Clean up rgbLed array
-    // detach ticker to avoid it calling into this object after destruction
+    for (int i=0;i<3;i++) if (rgbLed[i]) delete rgbLed[i];
     pwmTicker.detach();
 }
 
 void RezimOvladanieLED::inicializuj() {
     for (int i=0;i<3;i++){
-        // keep pins[] intact for diagnostic, but use software PWM on rgbPins
-        jas[i] = 0; // Initialize brightness
+        jas[i] = 0;
     }
     vybranaLED = 0;
 
-    // default: set the currently selected LED to a visible brightness
-    const uint8_t default_brightness = 128; // mid-level
+    const uint8_t default_brightness = 128;
     jas[vybranaLED] = default_brightness;
-    // initialize software PWM DigitalOuts for onboard RGB pins
     for (int i=0;i<3;i++){
         if (rgbLed[i]) { delete rgbLed[i]; rgbLed[i] = nullptr; }
         if (rgbPins[i] != NC) rgbLed[i] = new DigitalOut(rgbPins[i], 0);
     }
-    // software PWM parameters
-    pwmResolution = 100; // finer steps for smoother brightness
-    pwmPeriodMs = 10; // full PWM period (ms) -> ~100Hz
+    pwmResolution = 100;
+    pwmPeriodMs = 10;
     pwmPeriodUs = pwmPeriodMs * 1000;
     pwmCounter = 0;
     lastPwmMs = std::chrono::duration_cast<std::chrono::milliseconds>(Kernel::Clock::now().time_since_epoch());
-    // ensure previous ticker detached, then start high-rate ticker for smooth PWM (1 ms)
     pwmTicker.detach();
     pwmTicker.attach(callback(this, &RezimOvladanieLED::pwmTick), 200us);
 
-    // Diagnostic: print pin numbers used for RGB
     if (konzola) {
         char buf[128];
         int n = snprintf(buf, sizeof(buf), "LED pins (RGB indices 0..2): %d, %d, %d\r\n", (int)pins[0], (int)pins[1], (int)pins[2]);
@@ -66,26 +58,23 @@ void RezimOvladanieLED::inicializuj() {
         const char* msg = "Rezim: Ovladanie LED (PWM) - spustene\r\n";
         konzola_safe_write(konzola, msg, strlen(msg));
     }
-    // blink defaults
     blinkEnabled = false;
     blinkIntervalMs = 500;
     lastBlinkMs = std::chrono::duration_cast<std::chrono::milliseconds>(Kernel::Clock::now().time_since_epoch());
     blinkState = false;
     last_print_mode = 0;
-    // init 3-state LED control
     startMs = std::chrono::duration_cast<std::chrono::milliseconds>(Kernel::Clock::now().time_since_epoch());
     for (int i=0;i<3;i++){
         stav[i] = StavLED::VYP;
-        frekvencia[i] = 1.0f; // 1 Hz default
+        frekvencia[i] = 1.0f;
     }
     last_print_stav = -99;
     last_print_freq = 0.0f;
-    // timers / interactive defaults
     for (int i=0;i<3;i++) {
         timerActive[i] = false;
         timerEnd[i] = Kernel::Clock::now();
     }
-    interactiveMode = true; // show menu on entry
+    interactiveMode = true;
     timerSettingMode = false;
     timerBufIdx = 0;
     needStatusPrint = false;
@@ -93,13 +82,11 @@ void RezimOvladanieLED::inicializuj() {
 
 void RezimOvladanieLED::aktualizuj() {
     auto teraz = std::chrono::duration_cast<std::chrono::milliseconds>(Kernel::Clock::now().time_since_epoch());
-    // if pwmTick or timer logic requested a status print, do it from main context
     if (needStatusPrint) {
         needStatusPrint = false;
         printStatusIfChanged();
     }
     if (!blinkEnabled) {
-        // Non-blink steady/pulse outputs are handled in pwmTick() via Ticker
         return;
     } else {
         if ((teraz - lastBlinkMs).count() >= (int)blinkIntervalMs) {
@@ -113,16 +100,13 @@ void RezimOvladanieLED::aktualizuj() {
             }
         }
     }
-    // No periodic prints here; we only print on state changes to avoid spam.
 }
 
 void RezimOvladanieLED::stlacenieKratke() {
     vybranaLED = (vybranaLED + 1) % 3;
-    // ensure newly selected LED is visible
     const uint8_t default_brightness = 64;
     if (jas[vybranaLED] == 0) {
         jas[vybranaLED] = default_brightness;
-        // ensure visible via pwmTick
         pwmTick();
     }
     printStatusIfChanged();
@@ -134,7 +118,6 @@ void RezimOvladanieLED::stlacenieDlhe() {
         if (tmp > 255) tmp = 255;
         jas[vybranaLED] = (uint8_t)tmp;
     }
-    // update outputs via pwmTick so new jas takes effect
     pwmTick();
     printStatusIfChanged();
 }
@@ -145,13 +128,11 @@ void RezimOvladanieLED::nastavJas(uint8_t idx, uint8_t hod){
 }
 
 void RezimOvladanieLED::spracujUART(char c) {
-    // ESC exits interactive sub-mode
     if ((unsigned char)c == 27) {
         interactiveMode = false;
         if (konzola) konzola_safe_write(konzola, "EXIT MENU\r\n", 11);
         return;
     }
-    // if we are collecting timer digits
     if (timerSettingMode) {
         if (c >= '0' && c <= '9') {
             if (timerBufIdx < (sizeof(timerBuf)-1)) timerBuf[timerBufIdx++] = c;
@@ -164,9 +145,7 @@ void RezimOvladanieLED::spracujUART(char c) {
                 auto now = Kernel::Clock::now();
                 timerEnd[vybranaLED] = now + std::chrono::milliseconds((long long)secs * 1000LL);
                 timerActive[vybranaLED] = true;
-                // force STALA for duration
                 stav[vybranaLED] = StavLED::STALA;
-                // ensure output updated immediately
                 pwmTick();
                 if (konzola) {
                     char out[128];
@@ -179,10 +158,8 @@ void RezimOvladanieLED::spracujUART(char c) {
             timerBufIdx = 0;
             return;
         }
-        // ignore other chars while collecting
         return;
     }
-    // allow color selection with r/g/b (lower or upper case)
     char lc = (char)tolower((unsigned char)c);
     if (lc == 'r' || lc == 'g' || lc == 'b') {
         int found = -1;
@@ -191,31 +168,25 @@ void RezimOvladanieLED::spracujUART(char c) {
         else if (lc == 'r') found = 2;
         if (found >= 0) {
             vybranaLED = found;
-            // if in blink mode, update immediately using rgbLed (avoid touching pattern leds)
             if (blinkEnabled) {
                 blinkState = false;
                 for (int i=0;i<3;i++) if (rgbLed[i]) rgbLed[i]->write(i==vybranaLED ? 1 : 0);
             } else {
-                // cycle state VYP -> STALA -> PULZ -> VYP
                 if (stav[vybranaLED] == StavLED::VYP) stav[vybranaLED] = StavLED::STALA;
                 else if (stav[vybranaLED] == StavLED::STALA) stav[vybranaLED] = StavLED::PULZ;
                 else stav[vybranaLED] = StavLED::VYP;
-                // ensure default jas non-zero when needed
-                if (stav[vybranaLED] != StavLED::VYP && jas[vybranaLED] == 0) jas[vybranaLED] = 200; // brighter default
-                    // immediately update outputs so STALA is visible right away
+                if (stav[vybranaLED] != StavLED::VYP && jas[vybranaLED] == 0) jas[vybranaLED] = 200;
                     pwmTick();
             }
             printStatusIfChanged();
         }
         return;
     }
-    // 'p' = force current LED to PULZ
     if (lc == 'p') {
         stav[vybranaLED] = StavLED::PULZ;
         printStatusIfChanged();
         return;
     }
-    // 't' = test: flash each RGB LED at full brightness briefly
     if (lc == 't') {
         for (int i=0;i<3;i++){
             if (konzola) {
@@ -225,19 +196,15 @@ void RezimOvladanieLED::spracujUART(char c) {
             }
             float old = 0.0f;
             if (rgbLed[i]) {
-                // drive high briefly
                 rgbLed[i]->write(1);
                 ThisThread::sleep_for(150ms);
-                // drive low briefly
                 rgbLed[i]->write(0);
                 ThisThread::sleep_for(150ms);
-                // restore will be handled by PWM loop
             }
         }
         printStatusIfChanged();
         return;
     }
-    // 'z' = set timed-on for selected LED (enter digits then ENTER)
     if (lc == 'z') {
         timerSettingMode = true;
         timerBufIdx = 0;
@@ -245,7 +212,6 @@ void RezimOvladanieLED::spracujUART(char c) {
         if (konzola) konzola_safe_write(konzola, "Zadaj cas v sekundach a stlac ENTER: ", 34);
         return;
     }
-    // 'd' = digital test: toggle pin via DigitalOut (forces high/low)
     if (lc == 'd') {
         for (int i=0;i<3;i++){
             if (konzola) {
@@ -253,7 +219,7 @@ void RezimOvladanieLED::spracujUART(char c) {
                 int n = snprintf(buf, sizeof(buf), "Digital test LED index %d (pin %d)\r\n", i, (int)pins[i]);
                 konzola_safe_write(konzola, buf, (size_t)n);
             }
-            DigitalOut dout(rgbPins[i]); // Use rgbPins for DigitalOut
+            DigitalOut dout(rgbPins[i]);
             dout = 1;
             ThisThread::sleep_for(200ms);
             dout = 0;
@@ -270,7 +236,6 @@ void RezimOvladanieLED::spracujUART(char c) {
                 frekvencia[vybranaLED] += 0.1f;
                 if (frekvencia[vybranaLED] > 5.0f) frekvencia[vybranaLED] = 5.0f;
             } else {
-                // smaller step to avoid full jumps
                 int step = 16;
                 int tmp = (int)jas[vybranaLED] + step;
                 if (tmp > 255) tmp = 255;
@@ -297,7 +262,6 @@ void RezimOvladanieLED::spracujUART(char c) {
 }
 
 void RezimOvladanieLED::printStatusIfChanged() {
-    // print only when mode/state/frequency changes
     int mode = blinkEnabled ? 1 : 0;
     int stavInt = (int)stav[vybranaLED];
     if (last_print_led != vybranaLED || last_print_stav != stavInt || last_print_freq != frekvencia[vybranaLED] || last_print_mode != mode || last_print_jas != jas[vybranaLED]) {
@@ -329,14 +293,12 @@ void RezimOvladanieLED::printStatusIfChanged() {
 }
 
 void RezimOvladanieLED::pwmTick() {
-    // called from Ticker at high rate
-    // expire timers (minimal work here; request status print from main thread)
     auto now_tp = Kernel::Clock::now();
     for (int ti = 0; ti < 3; ++ti) {
         if (timerActive[ti] && now_tp >= timerEnd[ti]) {
             timerActive[ti] = false;
             stav[ti] = StavLED::VYP;
-            needStatusPrint = true; // printed from aktualizuj()
+            needStatusPrint = true;
         }
     }
     auto teraz_us = std::chrono::duration_cast<std::chrono::microseconds>(Kernel::Clock::now().time_since_epoch());
@@ -346,7 +308,6 @@ void RezimOvladanieLED::pwmTick() {
         float duty = 0.0f;
         if (stav[i] == StavLED::VYP) duty = 0.0f;
         else if (stav[i] == StavLED::STALA) {
-            // apply simple gamma correction for perceived brightness
             const float gamma = 2.4f;
             float normalized = (float)jas[i] / 255.0f;
             duty = powf(normalized, gamma);
@@ -365,7 +326,6 @@ void RezimOvladanieLED::pwmTick() {
 }
 
 void RezimOvladanieLED::deinit() {
-    // detach ticker and set RGB outputs to off
     pwmTicker.detach();
     for (int i=0;i<3;i++) if (rgbLed[i]) rgbLed[i]->write(0);
 }

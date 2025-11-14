@@ -26,7 +26,6 @@ RezimBlikanieLED::~RezimBlikanieLED() {
 }
 
 void RezimBlikanieLED::inicializuj() {
-    // create DigitalOuts for 8 LEDs but reuse if pin equals an rgb pin
     for (int i=0;i<8;i++){
         if (led[i]) { delete led[i]; led[i] = nullptr; }
         bool reused = false;
@@ -41,18 +40,13 @@ void RezimBlikanieLED::inicializuj() {
         }
         if (!reused) led[i] = new DigitalOut(pins[i], 0);
     }
-    // ensure other rgbLed entries exist
     for (int i=0;i<3;i++){
         if (!rgbLed[i] && rgbPins[i] != NC) rgbLed[i] = new DigitalOut(rgbPins[i], 0);
     }
-    // start with no selected RGB so pattern controls all; default pattern will cycle RGBs
     selectedRGB = -1;
-    // ensure initial pattern cycles RGB only if pins map to first three leds
-    // sequence order: RED, GREEN, BLUE (indices 2,0,1)
-    rezimPatternu = 2; // custom: 2 == rgb-sequence
+    rezimPatternu = 2;
     poslednyMs = std::chrono::duration_cast<std::chrono::milliseconds>(Kernel::Clock::now().time_since_epoch());
     pattern = 0x01;
-    // concise interactive hint and enter interactive sub-mode
     if (konzola) {
         const char* msg = "Blikanie LED - menu:\r\n  r/g/b - vyber farby, 0/1/2 - pattern, +/- - uprav interval, ESC - ukonci menu\r\n";
         konzola_safe_write(konzola, msg, strlen(msg));
@@ -62,9 +56,7 @@ void RezimBlikanieLED::inicializuj() {
 }
 
 void RezimBlikanieLED::deinit() {
-    // stop rgb blinking and ensure pattern LEDs are restored to full-on where pattern bit is set
     selectedRGB = -1;
-    // force pattern LEDs to full on for bits currently set
     for (int i=0;i<8;i++){
         if (led[i]) led[i]->write((pattern & (1<<i)) ? 1 : 0);
     }
@@ -88,7 +80,6 @@ void RezimBlikanieLED::aktualizuj() {
             pos += dir;
             if (pos==0 || pos==7) dir=-dir;
         } else if (rezimPatternu==2) {
-            // rgb-sequence: cycle only the available rgbLed pins
             int avail[3]; int cnt=0;
             for (int r=0;r<3;r++) if (rgbLed[r]) avail[cnt++] = r;
             if (cnt == 0) return;
@@ -119,9 +110,7 @@ void RezimBlikanieLED::aktualizuj() {
 }
 
 void RezimBlikanieLED::spracujUART(char c) {
-    // only accept commands while in interactive sub-mode
     if (!interactiveMode) return;
-    // ESC (27) exits interactive mode
     if ((unsigned char)c == 27) {
         interactiveMode = false;
         if (konzola) konzola_safe_write(konzola, "Vystup z menu\r\n", 14);

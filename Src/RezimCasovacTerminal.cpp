@@ -8,8 +8,7 @@
 using namespace mbed;
 using namespace std::chrono;
 
-RezimCasovacTerminal::RezimCasovacTerminal(UnbufferedSerial* konzola_uart, uint32_t intervalMs)
-        : startMs(Kernel::Clock::now()), zakladMs(0), pauza(false),
+RezimCasovacTerminal::RezimCasovacTerminal(UnbufferedSerial* konzola_uart, uint32_t intervalMs) : startMs(Kernel::Clock::now()), zakladMs(0), pauza(false),
             poslednyVypisMs(Kernel::Clock::now()), intervalVypisuMs(intervalMs),
             alarmSekundy(0), alarmSpusteny(false), konzola(konzola_uart) {}
 
@@ -42,7 +41,6 @@ void RezimCasovacTerminal::aktualizuj() {
     uint32_t elapsedMs = zakladMs + (pauza ? 0 : duration_cast<milliseconds>(now - startMs).count());
 
     auto delta = duration_cast<milliseconds>(now - poslednyVypisMs).count();
-    // only print periodic time when not paused
     if (!pauza && delta >= (int)intervalVypisuMs) {
         poslednyVypisMs = now;
         uint32_t s = elapsedMs / 1000;
@@ -87,11 +85,9 @@ void RezimCasovacTerminal::spracujUART(char c) {
         if (pauza) {
             auto now = Kernel::Clock::now();
             zakladMs += duration_cast<milliseconds>(now - startMs).count();
-            // avoid periodic printing while paused
             poslednyVypisMs = now;
         } else {
             startMs = Kernel::Clock::now();
-            // reset last print to avoid immediate outdated print
             poslednyVypisMs = startMs;
         }
         if (konzola) {
